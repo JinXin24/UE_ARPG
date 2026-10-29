@@ -27,6 +27,7 @@
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelWidget.h"
+#include "UnrealMCPBlueprintGraphJson.h"
 
 namespace UnrealMCPBlueprintRead
 {
@@ -455,12 +456,13 @@ namespace UnrealMCPBlueprintRead
 
         if (bIncludeJson)
         {
+            // Node object names stay stable when other nodes are added or removed, so edit commands can use them
             TMap<const UEdGraphNode*, FString> NodeIds;
-            for (int32 Index = 0; Index < Graph->Nodes.Num(); ++Index)
+            for (UEdGraphNode* Node : Graph->Nodes)
             {
-                if (Graph->Nodes[Index])
+                if (Node)
                 {
-                    NodeIds.Add(Graph->Nodes[Index], FString::Printf(TEXT("N%d"), Index));
+                    NodeIds.Add(Node, Node->GetName());
                 }
             }
 

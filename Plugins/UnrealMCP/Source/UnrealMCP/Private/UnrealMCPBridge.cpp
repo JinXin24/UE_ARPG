@@ -55,6 +55,7 @@
 #include "Commands/UnrealMCPBlueprintCommands.h"
 #include "Commands/UnrealMCPBlueprintNodeCommands.h"
 #include "Commands/UnrealMCPBlueprintReadCommands.h"
+#include "Commands/UnrealMCPBlueprintEditCommands.h"
 #include "Commands/UnrealMCPProjectCommands.h"
 #include "Commands/UnrealMCPCommonUtils.h"
 #include "Commands/UnrealMCPUMGCommands.h"
@@ -68,6 +69,7 @@ UUnrealMCPBridge::UUnrealMCPBridge()
     EditorCommands = MakeShared<FUnrealMCPEditorCommands>();
     BlueprintCommands = MakeShared<FUnrealMCPBlueprintCommands>();
     BlueprintReadCommands = MakeShared<FUnrealMCPBlueprintReadCommands>();
+    BlueprintEditCommands = MakeShared<FUnrealMCPBlueprintEditCommands>();
     BlueprintNodeCommands = MakeShared<FUnrealMCPBlueprintNodeCommands>();
     ProjectCommands = MakeShared<FUnrealMCPProjectCommands>();
     UMGCommands = MakeShared<FUnrealMCPUMGCommands>();
@@ -78,6 +80,7 @@ UUnrealMCPBridge::~UUnrealMCPBridge()
     EditorCommands.Reset();
     BlueprintCommands.Reset();
     BlueprintReadCommands.Reset();
+    BlueprintEditCommands.Reset();
     BlueprintNodeCommands.Reset();
     ProjectCommands.Reset();
     UMGCommands.Reset();
@@ -258,6 +261,11 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("read_blueprint"))
             {
                 ResultJson = BlueprintReadCommands->HandleCommand(CommandType, Params);
+            }
+            // Blueprint Edit Commands
+            else if (FUnrealMCPBlueprintEditCommands::GetCommandNames().Contains(CommandType))
+            {
+                ResultJson = BlueprintEditCommands->HandleCommand(CommandType, Params);
             }
             // Blueprint Node Commands
             else if (CommandType == TEXT("connect_blueprint_nodes") || 

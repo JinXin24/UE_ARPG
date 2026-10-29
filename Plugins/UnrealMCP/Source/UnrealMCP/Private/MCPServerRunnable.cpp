@@ -57,6 +57,7 @@ uint32 FMCPServerRunnable::Run()
                 ClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
                 
                 uint8 Buffer[8192];
+                TArray<uint8> Pending;
                 while (bRunning)
                 {
                     int32 BytesRead = 0;
@@ -68,16 +69,26 @@ uint32 FMCPServerRunnable::Run()
                             break;
                         }
 
-                        // Convert received data to string
-                        Buffer[BytesRead] = '\0';
-                        FString ReceivedText = UTF8_TO_TCHAR(Buffer);
-                        UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Received: %s"), *ReceivedText);
+                        // Large commands arrive in several chunks: buffer until the whole JSON object is here
+                        Pending.Append(Buffer, BytesRead);
+                        FUTF8ToTCHAR Converted(reinterpret_cast<const ANSICHAR*>(Pending.GetData()), Pending.Num());
+                        FString ReceivedText(Converted.Length(), Converted.Get());
+                        UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Received %d bytes (%d buffered)"), BytesRead, Pending.Num());
 
-                        // Parse JSON
                         TSharedPtr<FJsonObject> JsonObject;
                         TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ReceivedText);
-                        
-                        if (FJsonSerializer::Deserialize(Reader, JsonObject))
+                        if (!FJsonSerializer::Deserialize(Reader, JsonObject))
+                        {
+                            if (Pending.Num() > 64 * 1024 * 1024)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Dropping %d bytes that never formed valid JSON"), Pending.Num());
+                                Pending.Reset();
+                            }
+                            continue;
+                        }
+                        Pending.Reset();
+
+                        if (JsonObject.IsValid())
                         {
                             // Get command type
                             FString CommandType;
