@@ -48,7 +48,8 @@ private:
     TSharedPtr<FJsonObject> HandleModifyVariable(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleRemoveComponent(const TSharedPtr<FJsonObject>& Params);
 
-    // Compile and save
+    // Compile, save and delete
     TSharedPtr<FJsonObject> HandleCompile(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSave(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleDeleteAsset(const TSharedPtr<FJsonObject>& Params);
 };

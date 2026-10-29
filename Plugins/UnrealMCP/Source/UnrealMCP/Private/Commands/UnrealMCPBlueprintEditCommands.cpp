@@ -33,6 +33,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet/KismetArrayLibrary.h"
 #include "EditorAssetLibrary.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "ScopedTransaction.h"
 #include "Layout/SlateRect.h"
 
@@ -1137,6 +1138,7 @@ const TMap<FString, FUnrealMCPBlueprintEditCommands::FHandler>& FUnrealMCPBluepr
         { TEXT("remove_blueprint_component"), &FUnrealMCPBlueprintEditCommands::HandleRemoveComponent },
         { TEXT("compile_blueprint_report"), &FUnrealMCPBlueprintEditCommands::HandleCompile },
         { TEXT("save_blueprint"), &FUnrealMCPBlueprintEditCommands::HandleSave },
+        { TEXT("delete_asset"), &FUnrealMCPBlueprintEditCommands::HandleDeleteAsset },
     };
     return Handlers;
 }
@@ -2212,5 +2214,94 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintEditCommands::HandleSave(const TShare
     }
     TSharedPtr<FJsonObject> Result = MakeResult();
     Result->SetStringField(TEXT("saved"), Blueprint->GetPathName());
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintEditCommands::HandleDeleteAsset(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetRef;
+    if (!Params->TryGetStringField(TEXT("asset"), AssetRef) || AssetRef.IsEmpty())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset' (name or /Game path)"));
+    }
+
+    // Resolve a bare name through the asset registry; it must match exactly one asset
+    IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    FString PackageName;
+    if (AssetRef.StartsWith(TEXT("/")))
+    {
+        PackageName = FPackageName::ObjectPathToPackageName(AssetRef);
+    }
+    else
+    {
+        TArray<FAssetData> Assets;
+        AssetRegistry.GetAssetsByPath(FName(TEXT("/Game")), Assets, true);
+        TArray<FString> Matches;
+        for (const FAssetData& Asset : Assets)
+        {
+            if (Asset.AssetName.ToString().Equals(AssetRef, ESearchCase::IgnoreCase))
+            {
+                Matches.Add(Asset.PackageName.ToString());
+            }
+        }
+        if (Matches.Num() != 1)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(Matches.Num() == 0
+                ? FString::Printf(TEXT("No asset named '%s' under /Game"), *AssetRef)
+                : FString::Printf(TEXT("'%s' is ambiguous, pass the full path: %s"), *AssetRef, *FString::Join(Matches, TEXT(", "))));
+        }
+        PackageName = Matches[0];
+    }
+
+    if (!PackageName.StartsWith(TEXT("/Game/")))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Only project assets under /Game can be deleted (got %s)"), *PackageName));
+    }
+    TArray<FAssetData> PackageAssets;
+    AssetRegistry.GetAssetsByPackageName(FName(*PackageName), PackageAssets);
+    if (PackageAssets.Num() == 0)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Asset not found: %s"), *PackageName));
+    }
+    const FString ObjectPath = PackageAssets[0].GetObjectPathString();
+
+    // Other packages that still point at this one
+    TArray<FName> Referencers;
+    AssetRegistry.GetReferencers(FName(*PackageName), Referencers, UE::AssetRegistry::EDependencyCategory::Package);
+    TArray<TSharedPtr<FJsonValue>> ReferencerList;
+    for (const FName& Referencer : Referencers)
+    {
+        if (Referencer.ToString() != PackageName)
+        {
+            ReferencerList.Add(MakeShared<FJsonValueString>(Referencer.ToString()));
+        }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeResult();
+    Result->SetStringField(TEXT("asset"), ObjectPath);
+    Result->SetArrayField(TEXT("referencers"), ReferencerList);
+
+    if (GetBoolParam(Params, TEXT("dry_run"), false))
+    {
+        Result->SetBoolField(TEXT("deleted"), false);
+        return Result;
+    }
+    if (ReferencerList.Num() > 0 && !GetBoolParam(Params, TEXT("force"), false))
+    {
+        TArray<FString> Names;
+        for (const TSharedPtr<FJsonValue>& Value : ReferencerList)
+        {
+            Names.Add(Value->AsString());
+        }
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(
+            TEXT("%s is still referenced by: %s. Pass force=true to delete anyway (those references will break)"),
+            *ObjectPath, *FString::Join(Names, TEXT(", "))));
+    }
+
+    if (!UEditorAssetLibrary::DeleteAsset(ObjectPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Deleting %s failed (see the editor Output Log)"), *ObjectPath));
+    }
+    Result->SetBoolField(TEXT("deleted"), true);
     return Result;
 }
