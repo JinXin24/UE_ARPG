@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "{619666D9-4220-35EC-3BCC-8C87B0BEFA34}",
+	"Category": "",
+	"Description": "",
+	"Modules": [
+		{
+			"Name": "ARPG",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "UnrealMCP",
+			"Enabled": true
+		}
+	]
+}
